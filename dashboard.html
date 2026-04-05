@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RDCO Operations Dashboard</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --teal:#009BA5;--teal-dark:#007A82;--teal-light:#E8F7F8;
+  --bg:#0F1117;--surface:#1A1D27;--surface2:#22263A;--surface3:#2A2F45;
+  --text:#F0F2F8;--text2:#9BA3BC;--text3:#5A6285;
+  --border:#2E3350;--border2:#3D4468;
+  --green:#34C759;--orange:#FF9500;--red:#FF453A;--blue:#0A84FF;
+  --r:10px;--rsm:6px;
+}
+html,body{height:100%;background:var(--bg);overflow:hidden}
+body{font-family:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',sans-serif;font-size:13px;color:var(--text);-webkit-font-smoothing:antialiased}
+
+.topbar{
+  background:var(--surface);border-bottom:1px solid var(--border);
+  padding:10px 18px;display:flex;align-items:center;justify-content:space-between;
+  height:52px;position:relative;z-index:100;
+}
+.tb-left{display:flex;align-items:center;gap:14px}
+.tb-logo{height:24px}
+.tb-logo-fb{color:var(--teal);font-size:15px;font-weight:700;display:none}
+.tb-title{font-size:15px;font-weight:500;color:var(--text)}
+.tb-right{display:flex;align-items:center;gap:16px}
+.tb-time{font-size:12px;color:var(--text3)}
+.tb-refresh{font-size:12px;color:var(--text3);min-width:70px;text-align:right}
+.owner-dot{width:8px;height:8px;border-radius:50%;background:var(--border2);cursor:pointer;transition:background 0.2s}
+.owner-dot.active{background:var(--orange)}
+.mode-pill{font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;background:rgba(255,149,0,0.15);color:var(--orange);display:none;letter-spacing:0.04em}
+.mode-pill.show{display:block}
+
+.layout{
+  display:grid;
+  grid-template-columns:1fr 340px;
+  grid-template-rows:auto 1fr auto;
+  gap:10px;padding:10px;
+  height:calc(100vh - 52px);
+}
+
+.kpi-row{grid-column:1/-1;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:12px 16px}
+.kpi-label{font-size:11px;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.06em}
+.kpi-val{font-size:26px;font-weight:300;letter-spacing:-0.02em;line-height:1.1}
+.kpi-sub{font-size:11px;color:var(--text3);margin-top:3px}
+
+.map-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;display:flex;flex-direction:column;min-height:0}
+.map-topbar{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--border);flex-shrink:0}
+.map-topbar-label{font-size:11px;color:var(--text3);margin-right:4px;text-transform:uppercase;letter-spacing:0.06em}
+.map-toggle{font-size:11px;padding:4px 12px;border-radius:20px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer;transition:all 0.15s;font-family:inherit}
+.map-toggle:hover{border-color:var(--teal);color:var(--teal)}
+.map-toggle.active{background:var(--teal);border-color:var(--teal);color:#fff}
+#map{flex:1;min-height:0}
+
+.right-col{display:flex;flex-direction:column;gap:10px;min-height:0;overflow-y:auto}
+.right-col::-webkit-scrollbar{display:none}
+
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:13px 15px;flex-shrink:0}
+.card-head{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px}
+
+.hot-job{padding:8px 0;border-bottom:1px solid var(--border)}
+.hot-job:last-child{border-bottom:none;padding-bottom:0}
+.hj-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:3px}
+.hj-name{font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hj-meta{font-size:11px;color:var(--text3);display:flex;gap:10px}
+.badge{font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;flex-shrink:0;letter-spacing:0.03em}
+.badge-alert{background:rgba(255,149,0,0.15);color:var(--orange)}
+.badge-ok{background:rgba(52,199,89,0.12);color:var(--green)}
+.badge-design{background:rgba(10,132,255,0.12);color:var(--blue)}
+.badge-eta{background:rgba(255,69,58,0.12);color:var(--red)}
+
+.funnel{display:flex;flex-direction:column;gap:6px}
+.funnel-row{display:flex;align-items:center;gap:10px}
+.funnel-label{font-size:11px;color:var(--text2);width:80px;flex-shrink:0}
+.funnel-bar-bg{flex:1;height:7px;background:var(--surface3);border-radius:4px;overflow:hidden}
+.funnel-bar{height:100%;border-radius:4px;background:var(--teal);transition:width 0.6s ease}
+.funnel-count{font-size:11px;color:var(--text3);width:20px;text-align:right;flex-shrink:0}
+.funnel-val{font-size:11px;color:var(--text3);width:50px;text-align:right;flex-shrink:0}
+
+.gauge-row{display:flex;gap:12px}
+.gauge{flex:1;text-align:center}
+.gauge-ring{position:relative;width:64px;height:64px;margin:0 auto 6px}
+.gauge-ring svg{transform:rotate(-90deg)}
+.gauge-num{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:14px;font-weight:500}
+.gauge-lbl{font-size:10px;color:var(--text3);line-height:1.3}
+
+.alerts-list{display:flex;flex-direction:column;gap:0}
+.alert-row{display:flex;align-items:flex-start;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)}
+.alert-row:last-child{border-bottom:none;padding-bottom:0}
+.alert-icon{width:6px;height:6px;border-radius:50%;margin-top:4px;flex-shrink:0}
+.alert-body{flex:1;min-width:0}
+.alert-name{font-size:12px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.alert-desc{font-size:11px;color:var(--text3)}
+
+.bottom-row{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+
+.pm-section{display:flex;flex-direction:column;gap:7px}
+.pm-row{display:flex;align-items:center;gap:10px}
+.pm-name{font-size:12px;color:var(--text2);width:96px;flex-shrink:0}
+.pm-bar-bg{flex:1;height:6px;background:var(--surface3);border-radius:3px;overflow:hidden}
+.pm-bar{height:100%;border-radius:3px;background:var(--teal)}
+.pm-count{font-size:11px;color:var(--text3);min-width:20px;text-align:right;flex-shrink:0}
+.pm-val{font-size:11px;color:var(--text3);min-width:52px;text-align:right;flex-shrink:0}
+
+.owner-only{display:none}
+.owner-mode .owner-only{display:block}
+.owner-mode .tv-only{display:none}
+
+.pw-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;
+  display:flex;align-items:center;justify-content:center;
+}
+.pw-box{
+  background:var(--surface);border:1px solid var(--border2);border-radius:14px;
+  padding:28px 32px;width:300px;text-align:center;
+}
+.pw-title{font-size:16px;font-weight:500;margin-bottom:6px}
+.pw-sub{font-size:12px;color:var(--text3);margin-bottom:18px}
+.pw-input{
+  width:100%;background:var(--surface3);border:1px solid var(--border2);
+  border-radius:var(--rsm);color:var(--text);font-size:14px;padding:10px 14px;
+  font-family:inherit;letter-spacing:0.1em;text-align:center;margin-bottom:8px;outline:none;
+}
+.pw-input:focus{border-color:var(--teal)}
+.pw-err{font-size:12px;color:var(--red);min-height:16px;margin-bottom:10px}
+.pw-btns{display:flex;gap:8px}
+.pw-btn{flex:1;padding:9px;border-radius:var(--rsm);border:none;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit}
+.pw-cancel{background:var(--surface3);color:var(--text2)}
+.pw-confirm{background:var(--teal);color:#fff}
+
+.toast{
+  position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(40px);
+  background:var(--surface);border:1px solid var(--border2);border-radius:var(--rsm);
+  padding:8px 16px;font-size:12px;color:var(--text2);
+  opacity:0;transition:all 0.3s;z-index:9998;pointer-events:none;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+.loading{display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:13px}
+
+.metric-signal{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:4px}
+.sig{background:var(--surface2);border-radius:var(--rsm);padding:8px 10px;text-align:center}
+.sig-val{font-size:16px;font-weight:500}
+.sig-lbl{font-size:10px;color:var(--text3);margin-top:2px}
+
+.closeout-list{display:flex;flex-direction:column;gap:4px;max-height:160px;overflow-y:auto}
+.closeout-list::-webkit-scrollbar{width:3px}
+.closeout-list::-webkit-scrollbar-track{background:transparent}
+.closeout-list::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+.closeout-row{display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:11px}
+.closeout-row:last-child{border-bottom:none}
+.closeout-name{color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px}
+.closeout-flags{display:flex;gap:4px;flex-shrink:0}
+.flag{font-size:9px;padding:1px 5px;border-radius:3px;font-weight:600;background:rgba(255,69,58,0.12);color:var(--red)}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="tb-left">
+    <img class="tb-logo" src="Horizontal_White_on_Teal_RD.png" alt="RDCO"
+         onerror="this.style.display='none';document.querySelector('.tb-logo-fb').style.display='block'">
+    <span class="tb-logo-fb">RDCO</span>
+    <span class="tb-title">Operations Dashboard</span>
+    <span class="mode-pill" id="mode-pill">OWNER VIEW</span>
+  </div>
+  <div class="tb-right">
+    <span class="tb-time" id="clock"></span>
+    <span class="tb-refresh" id="refresh-label">↻ 5:00</span>
+    <div class="owner-dot" id="owner-dot" onclick="showPwDialog()" title="Owner mode"></div>
+  </div>
+</div>
+
+<div class="layout" id="main-layout">
+  <div class="kpi-row">
+    <div class="kpi">
+      <div class="kpi-label">Active jobs</div>
+      <div class="kpi-val" id="kpi-jobs" style="color:var(--teal)">—</div>
+      <div class="kpi-sub" id="kpi-jobs-sub">loading…</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Pipeline value</div>
+      <div class="kpi-val" id="kpi-value">—</div>
+      <div class="kpi-sub">active &amp; in progress</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Installing this month</div>
+      <div class="kpi-val" id="kpi-installing">—</div>
+      <div class="kpi-sub" id="kpi-installing-sub">—</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Open alerts</div>
+      <div class="kpi-val" id="kpi-alerts" style="color:var(--orange)">—</div>
+      <div class="kpi-sub" id="kpi-alerts-sub">—</div>
+    </div>
+  </div>
+
+  <div class="map-card">
+    <div class="map-topbar">
+      <span class="map-topbar-label">Jobs</span>
+      <button class="map-toggle active" id="btn-active" onclick="setMapMode('active')">Active</button>
+      <button class="map-toggle" id="btn-completed" onclick="setMapMode('completed')">+ Completed</button>
+      <button class="map-toggle" id="btn-all" onclick="setMapMode('all')">All time</button>
+    </div>
+    <div id="map"></div>
+  </div>
+
+  <div class="right-col">
+    <div class="card">
+      <div class="card-head">Installing soon</div>
+      <div id="hot-jobs-list"><div class="loading">Loading…</div></div>
+    </div>
+
+    <div class="card tv-only">
+      <div class="card-head">Pipeline by status</div>
+      <div class="funnel" id="funnel-tv"></div>
+    </div>
+
+    <div class="card owner-only" id="owner-pm-card">
+      <div class="card-head">PM pipeline</div>
+      <div class="pm-section" id="pm-section"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">Benchmarks</div>
+      <div class="gauge-row" id="gauge-row">
+        <div class="gauge">
+          <div class="gauge-ring">
+            <svg width="64" height="64" viewBox="0 0 64 64">
+              <circle cx="32" cy="32" r="26" fill="none" stroke="#2A2F45" stroke-width="7"/>
+              <circle id="g-startup-arc" cx="32" cy="32" r="26" fill="none" stroke="var(--green)" stroke-width="7" stroke-dasharray="163" stroke-dashoffset="163" stroke-linecap="round"/>
+            </svg>
+            <div class="gauge-num" id="g-startup-num">—</div>
+          </div>
+          <div class="gauge-lbl">Startup<br>meetings</div>
+        </div>
+        <div class="gauge">
+          <div class="gauge-ring">
+            <svg width="64" height="64" viewBox="0 0 64 64">
+              <circle cx="32" cy="32" r="26" fill="none" stroke="#2A2F45" stroke-width="7"/>
+              <circle id="g-margin-arc" cx="32" cy="32" r="26" fill="none" stroke="var(--green)" stroke-width="7" stroke-dasharray="163" stroke-dashoffset="163" stroke-linecap="round"/>
+            </svg>
+            <div class="gauge-num" id="g-margin-num">—</div>
+          </div>
+          <div class="gauge-lbl">Margin<br>protection</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">Alerts</div>
+      <div id="alerts-list"><div class="loading">Loading…</div></div>
+    </div>
+
+    <div class="card owner-only" id="owner-signals-card">
+      <div class="card-head">Owner signals</div>
+      <div class="metric-signal" id="owner-signals"></div>
+    </div>
+
+    <div class="card owner-only" id="owner-closeout-card">
+      <div class="card-head">Missing close-out data</div>
+      <div class="closeout-list" id="closeout-list"></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyLnBcgtkwdozdALNy8URu6WAp09vsoTRUxFyS82AWsXNIOvIv0sM27-iLuifxVHtzB2g/exec';
+const OWNER_PASSWORD = 'rdco2024';
+const REFRESH_SECONDS = 300;
+
+let allProjects = [];
+let ownerMode = false;
+let mapMode = 'active';
+let mapInstance = null;
+let activeMarkers = [];
+let completedMarkers = [];
+let countdown = REFRESH_SECONDS;
+let timer = null;
+let clockTimer = null;
+
+const STATUSES_ACTIVE = ['Awarded','Design','Materials Ordered','Ready to Install','Installing'];
+const STATUSES_ALL = [...STATUSES_ACTIVE, 'Completed'];
+
+const STATUS_ORDER = ['Awarded','Design','Materials Ordered','Ready to Install','Installing','Completed'];
+const PM_LIST = ['Matt Balson','Mallory Dubois','Doug Hingley','Mark Stetson'];
+
+function fmt$(v){
+  const n=parseFloat(v)||0;
+  if(n>=1000000) return '$'+(n/1000000).toFixed(1)+'M';
+  if(n>=1000) return '$'+Math.round(n/1000)+'K';
+  return '$'+Math.round(n);
+}
+function fmtPct(v){return Math.round(parseFloat(v)||0)+'%'}
+function daysUntil(dateStr){
+  if(!dateStr) return null;
+  const d=new Date(dateStr);
+  if(isNaN(d)) return null;
+  return Math.round((d-new Date())/(1000*60*60*24));
+}
+function isActive(p){return STATUSES_ACTIVE.includes(p['Job Status'])}
+function isCompleted(p){return p['Job Status']==='Completed'}
+
+function hasAlert(p){
+  const flags=[];
+  if(p['Design Required']==='Yes' && p['Design Status']!=='Completed') flags.push({type:'design',label:'Design'});
+  if(p['Materials Ordered']==='No') flags.push({type:'materials',label:'Materials'});
+  if(p['Critical ETA']){const d=daysUntil(p['Critical ETA']);if(d!==null&&d<=7) flags.push({type:'eta',label:'ETA'})}
+  if(parseFloat(p['Value']||0)>50000 && p['Startup Meeting'] && !p['Startup Meeting'].trim()){
+    const ins=daysUntil(p['Install Start']);if(ins!==null&&ins<=14) flags.push({type:'startup',label:'Startup'});
+  }
+  return flags;
+}
+function alertColor(type){
+  return type==='eta'||type==='startup'?'var(--red)':'var(--orange)';
+}
+function badgeClass(type){
+  if(type==='eta') return 'badge-eta';
+  if(type==='startup') return 'badge-alert';
+  if(type==='design') return 'badge-design';
+  return 'badge-alert';
+}
+
+function initMap(){
+  mapInstance=L.map('map',{zoomControl:true,attributionControl:false}).setView([53.5,-114.5],6);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+    subdomains:'abcd',maxZoom:19
+  }).addTo(mapInstance);
+}
+
+function makeIcon(color,size=10){
+  return L.divIcon({
+    className:'',
+    html:`<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:2px solid rgba(255,255,255,0.8);box-shadow:0 0 6px rgba(0,0,0,0.5)"></div>`,
+    iconSize:[size,size],iconAnchor:[size/2,size/2]
+  });
+}
+
+function setMapMode(mode){
+  mapMode=mode;
+  ['active','completed','all'].forEach(m=>{
+    document.getElementById('btn-'+m).classList.toggle('active',m===mode);
+  });
+  renderMap();
+}
+
+function renderMap(){
+  if(!mapInstance) return;
+  activeMarkers.forEach(m=>mapInstance.removeLayer(m));
+  completedMarkers.forEach(m=>mapInstance.removeLayer(m));
+  activeMarkers=[];completedMarkers=[];
+
+  allProjects.forEach(p=>{
+    const lat=parseFloat(p['Latitude']),lng=parseFloat(p['Longitude']);
+    if(!lat||!lng) return;
+    const active=isActive(p),completed=isCompleted(p);
+    const alerts=hasAlert(p);
+    let show=false,icon;
+    if(active){
+      show=true;
+      icon=makeIcon(alerts.length?'#FF9500':'#009BA5',12);
+    } else if(completed && (mapMode==='completed'||mapMode==='all')){
+      show=true;
+      icon=makeIcon('#5A6285',8);
+    }
+    if(!show) return;
+    const popup=`<b style="color:#fff">${p['Project Name']||'Unnamed'}</b><br>
+      <span style="color:#9BA3BC">${p['Client']||''}</span><br>
+      <span style="color:#9BA3BC">${p['Job Status']||''} · ${fmt$(p['Value'])}</span><br>
+      <span style="color:#9BA3BC">PM: ${p['Our PM']||'—'}</span>`;
+    const marker=L.marker([lat,lng],{icon}).bindPopup(popup,{className:'rdco-popup'});
+    marker.addTo(mapInstance);
+    if(active) activeMarkers.push(marker);
+    else completedMarkers.push(marker);
+  });
+}
+
+function renderKPIs(projects){
+  const active=projects.filter(isActive);
+  const pipelineVal=active.reduce((s,p)=>s+(parseFloat(p['Value'])||0),0);
+  const now=new Date();
+  const monthEnd=new Date(now.getFullYear(),now.getMonth()+1,0);
+  const installingThisMonth=active.filter(p=>{
+    const d=new Date(p['Install Start']);
+    return !isNaN(d)&&d>=now&&d<=monthEnd;
+  });
+  const within7=installingThisMonth.filter(p=>daysUntil(p['Install Start'])<=7).length;
+  const allAlerts=projects.filter(p=>isActive(p)&&hasAlert(p).length>0);
+  const critAlerts=projects.filter(p=>isActive(p)&&hasAlert(p).some(a=>a.type==='eta'||a.type==='startup'));
+
+  document.getElementById('kpi-jobs').textContent=active.length;
+  document.getElementById('kpi-jobs-sub').textContent='across '+PM_LIST.length+' PMs';
+  document.getElementById('kpi-value').textContent=fmt$(pipelineVal);
+  document.getElementById('kpi-installing').textContent=installingThisMonth.length;
+  document.getElementById('kpi-installing-sub').textContent=within7+' within 7 days';
+  document.getElementById('kpi-alerts').textContent=allAlerts.length;
+  document.getElementById('kpi-alerts').style.color=allAlerts.length>0?'var(--orange)':'var(--green)';
+  document.getElementById('kpi-alerts-sub').textContent=critAlerts.length+' critical';
+}
+
+function renderHotJobs(projects){
+  const active=projects.filter(isActive);
+  const sorted=active
+    .filter(p=>p['Install Start'])
+    .map(p=>({...p,days:daysUntil(p['Install Start'])}))
+    .filter(p=>p.days!==null&&p.days>=0)
+    .sort((a,b)=>a.days-b.days)
+    .slice(0,4);
+
+  const el=document.getElementById('hot-jobs-list');
+  if(!sorted.length){el.innerHTML='<div style="font-size:12px;color:var(--text3);padding:6px 0">No upcoming installs found</div>';return;}
+  el.innerHTML=sorted.map(p=>{
+    const alerts=hasAlert(p);
+    const daysLabel=p.days===0?'Today':p.days===1?'Tomorrow':'In '+p.days+' days';
+    const badgeHtml=alerts.length
+      ?`<span class="badge ${badgeClass(alerts[0].type)}">${alerts[0].label}</span>`
+      :`<span class="badge badge-ok">On track</span>`;
+    return `<div class="hot-job">
+      <div class="hj-top"><span class="hj-name">${p['Project Name']||'Unnamed'}</span>${badgeHtml}</div>
+      <div class="hj-meta"><span>${p['Our PM']||'—'}</span><span>${daysLabel}</span><span>${fmt$(p['Value'])}</span></div>
+    </div>`;
+  }).join('');
+}
+
+function renderFunnelTV(projects){
+  const active=projects.filter(isActive);
+  const counts={};
+  STATUS_ORDER.filter(s=>s!=='Completed').forEach(s=>counts[s]=0);
+  active.forEach(p=>{if(counts[p['Job Status']]!==undefined)counts[p['Job Status']]++;});
+  const max=Math.max(...Object.values(counts),1);
+  const el=document.getElementById('funnel-tv');
+  el.innerHTML=STATUS_ORDER.filter(s=>s!=='Completed').map(s=>`
+    <div class="funnel-row">
+      <span class="funnel-label">${s}</span>
+      <div class="funnel-bar-bg"><div class="funnel-bar" style="width:${(counts[s]/max*100)}%"></div></div>
+      <span class="funnel-count">${counts[s]}</span>
+    </div>`).join('');
+}
+
+function renderAlerts(projects){
+  const active=projects.filter(isActive);
+  const alertItems=[];
+  active.forEach(p=>{
+    hasAlert(p).forEach(a=>{
+      alertItems.push({name:p['Project Name']||'Unnamed',type:a.type,label:a.label,pm:p['Our PM']||'—'});
+    });
+  });
+  const el=document.getElementById('alerts-list');
+  if(!alertItems.length){el.innerHTML='<div style="font-size:12px;color:var(--green);padding:6px 0">No active alerts</div>';return;}
+  el.innerHTML=alertItems.slice(0,6).map(a=>`
+    <div class="alert-row">
+      <div class="alert-icon" style="background:${alertColor(a.type)}"></div>
+      <div class="alert-body">
+        <div class="alert-name">${a.name}</div>
+        <div class="alert-desc">${a.label} · ${a.pm}</div>
+      </div>
+    </div>`).join('');
+}
+
+function renderGauges(projects){
+  const closed=projects.filter(isCompleted);
+  const eligible=closed.filter(p=>parseFloat(p['Value']||0)>50000);
+  const suHit=eligible.filter(p=>p['Startup Meeting']&&p['Startup Meeting'].trim());
+  const suRate=eligible.length?Math.round(suHit.length/eligible.length*100):100;
+
+  const marginJobs=closed.filter(p=>p['Ending Margin']!==undefined&&p['Ending Margin']!=='');
+  const marginOk=marginJobs.filter(p=>{
+    const v=parseFloat(p['Ending Margin']||0)-parseFloat(p['Starting Margin']||0);
+    return v>=-0.05;
+  });
+  const marginRate=marginJobs.length?Math.round(marginOk.length/marginJobs.length*100):100;
+
+  function setGauge(arcId,numId,rate){
+    const circ=2*Math.PI*26;
+    const offset=circ-(rate/100*circ);
+    const arc=document.getElementById(arcId);
+    arc.style.strokeDashoffset=offset;
+    arc.style.stroke=rate>=80?'var(--green)':rate>=60?'var(--orange)':'var(--red)';
+    document.getElementById(numId).textContent=rate+'%';
+    document.getElementById(numId).style.color=rate>=80?'var(--green)':rate>=60?'var(--orange)':'var(--red)';
+  }
+  setGauge('g-startup-arc','g-startup-num',suRate);
+  setGauge('g-margin-arc','g-margin-num',marginRate);
+}
+
+function renderOwnerPM(projects){
+  const active=projects.filter(isActive);
+  const pmData=PM_LIST.map(pm=>{
+    const jobs=active.filter(p=>p['Our PM']===pm);
+    const val=jobs.reduce((s,p)=>s+(parseFloat(p['Value'])||0),0);
+    return {pm,jobs:jobs.length,val};
+  }).sort((a,b)=>b.jobs-a.jobs);
+  const maxJobs=Math.max(...pmData.map(d=>d.jobs),1);
+  document.getElementById('pm-section').innerHTML=pmData.map(d=>`
+    <div class="pm-row">
+      <span class="pm-name">${d.pm.split(' ')[0]+' '+d.pm.split(' ')[1][0]+'.'}</span>
+      <div class="pm-bar-bg"><div class="pm-bar" style="width:${d.jobs/maxJobs*100}%"></div></div>
+      <span class="pm-count">${d.jobs}</span>
+      <span class="pm-val">${fmt$(d.val)}</span>
+    </div>`).join('');
+}
+
+function renderOwnerSignals(projects){
+  const active=projects.filter(isActive);
+  const closed=projects.filter(isCompleted);
+  const totalVal=active.reduce((s,p)=>s+(parseFloat(p['Value'])||0),0);
+  const avgMargin=closed.length?closed.reduce((s,p)=>s+(parseFloat(p['Ending Margin'])||0),0)/closed.length:0;
+  const missingCloseout=closed.filter(p=>!p['Completed Date']||!p['Ending Margin']||!p['Warranty Status']||p['Warranty Status']!=='Completed').length;
+  const alertCount=active.filter(p=>hasAlert(p).length>0).length;
+  const installs7=active.filter(p=>{const d=daysUntil(p['Install Start']);return d!==null&&d>=0&&d<=7;}).length;
+  const marginMisses=closed.filter(p=>p['Ending Margin']!==undefined&&(parseFloat(p['Ending Margin']||0)-parseFloat(p['Starting Margin']||0))<-0.05).length;
+
+  document.getElementById('owner-signals').innerHTML=[
+    {label:'Pipeline $',val:fmt$(totalVal),color:'var(--teal)'},
+    {label:'Avg margin',val:fmtPct(avgMargin*100),color:avgMargin>=0?'var(--green)':'var(--red)'},
+    {label:'Alerts open',val:alertCount,color:alertCount>0?'var(--orange)':'var(--green)'},
+    {label:'Installs ≤7d',val:installs7,color:installs7>0?'var(--orange)':'var(--text)'},
+    {label:'Margin misses',val:marginMisses,color:marginMisses>0?'var(--red)':'var(--green)'},
+    {label:'Missing closeout',val:missingCloseout,color:missingCloseout>0?'var(--red)':'var(--green)'},
+  ].map(s=>`<div class="sig"><div class="sig-val" style="color:${s.color}">${s.val}</div><div class="sig-lbl">${s.label}</div></div>`).join('');
+}
+
+function renderCloseout(projects){
+  const closed=projects.filter(isCompleted);
+  const missing=closed.filter(p=>{
+    const flags=[];
+    if(!p['Completed Date']||!p['Completed Date'].trim()) flags.push('Date');
+    if(!p['Ending Margin']&&p['Ending Margin']!==0) flags.push('Margin');
+    if(p['Warranty Status']!=='Completed') flags.push('Warranty');
+    if(parseFloat(p['Value']||0)>50000&&(!p['Startup Meeting']||!p['Startup Meeting'].trim())) flags.push('Startup');
+    p._flags=flags;
+    return flags.length>0;
+  });
+  const el=document.getElementById('closeout-list');
+  if(!missing.length){el.innerHTML='<div style="font-size:12px;color:var(--green);padding:6px 0">All jobs fully closed out</div>';return;}
+  el.innerHTML=missing.slice(0,8).map(p=>`
+    <div class="closeout-row">
+      <span class="closeout-name">${p['Project Name']||'Unnamed'}</span>
+      <div class="closeout-flags">${p._flags.map(f=>`<span class="flag">${f}</span>`).join('')}</div>
+    </div>`).join('');
+}
+
+function renderAll(data){
+  allProjects=data.projects||[];
+  renderKPIs(allProjects);
+  renderHotJobs(allProjects);
+  renderFunnelTV(allProjects);
+  renderAlerts(allProjects);
+  renderGauges(allProjects);
+  renderMap();
+  if(ownerMode){
+    renderOwnerPM(allProjects);
+    renderOwnerSignals(allProjects);
+    renderCloseout(allProjects);
+  }
+}
+
+function loadData(){
+  const cb='rdco_cb_'+Date.now();
+  const script=document.createElement('script');
+  script.src=`${SCRIPT_URL}?action=getAllData&callback=${cb}`;
+  window[cb]=function(data){
+    delete window[cb];
+    document.body.removeChild(script);
+    renderAll(data);
+    countdown=REFRESH_SECONDS;
+  };
+  script.onerror=function(){
+    document.body.removeChild(script);
+    showToast('Connection error — retrying in 5 min');
+  };
+  document.body.appendChild(script);
+}
+
+function showPwDialog(){
+  if(ownerMode){exitOwner();return;}
+  const overlay=document.createElement('div');
+  overlay.className='pw-overlay';
+  overlay.id='pw-root';
+  overlay.innerHTML=`
+    <div class="pw-box">
+      <div class="pw-title">Owner access</div>
+      <div class="pw-sub">Enter password to unlock PM data</div>
+      <input class="pw-input" type="password" id="pw-inp" placeholder="••••••••" onkeydown="if(event.key==='Enter')confirmPw()">
+      <div class="pw-err" id="pw-err"></div>
+      <div class="pw-btns">
+        <button class="pw-btn pw-cancel" onclick="cancelPw()">Cancel</button>
+        <button class="pw-btn pw-confirm" onclick="confirmPw()">Unlock</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  setTimeout(()=>document.getElementById('pw-inp')?.focus(),50);
+}
+
+function confirmPw(){
+  const v=document.getElementById('pw-inp')?.value;
+  if(v===OWNER_PASSWORD){
+    document.getElementById('pw-root').remove();
+    ownerMode=true;
+    document.getElementById('owner-dot').classList.add('active');
+    document.getElementById('mode-pill').classList.add('show');
+    document.getElementById('main-layout').classList.add('owner-mode');
+    renderOwnerPM(allProjects);
+    renderOwnerSignals(allProjects);
+    renderCloseout(allProjects);
+    showToast('Owner mode unlocked');
+  } else {
+    document.getElementById('pw-err').textContent='Incorrect password';
+    document.getElementById('pw-inp').value='';
+    document.getElementById('pw-inp').focus();
+  }
+}
+
+function cancelPw(){document.getElementById('pw-root')?.remove();}
+
+function exitOwner(){
+  ownerMode=false;
+  document.getElementById('owner-dot').classList.remove('active');
+  document.getElementById('mode-pill').classList.remove('show');
+  document.getElementById('main-layout').classList.remove('owner-mode');
+  showToast('Returned to TV mode');
+}
+
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2500);
+}
+
+function updateClock(){
+  const now=new Date();
+  document.getElementById('clock').textContent=now.toLocaleTimeString('en-CA',{hour:'2-digit',minute:'2-digit',hour12:true});
+}
+
+function tick(){
+  countdown--;
+  const m=Math.floor(countdown/60),s=countdown%60;
+  document.getElementById('refresh-label').textContent=`↻ ${m}:${s.toString().padStart(2,'0')}`;
+  if(countdown<=0){loadData();showToast('Dashboard refreshed');}
+}
+
+initMap();
+loadData();
+updateClock();
+clockTimer=setInterval(updateClock,1000);
+timer=setInterval(tick,1000);
+</script>
+</body>
+</html>
